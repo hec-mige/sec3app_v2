@@ -12,6 +12,25 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Dangerous Permissions Viewer',
+      theme: ThemeData.dark().copyWith(
+        colorScheme: ColorScheme.dark(
+          primary: Colors.blueAccent,
+          secondary: Colors.white,
+        ),
+        elevatedButtonTheme: ElevatedButtonThemeData(
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.blueAccent,
+            foregroundColor: Colors.white,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          ),
+        ),
+        dialogTheme: DialogTheme(
+          backgroundColor: Colors.grey[900],
+          titleTextStyle: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white),
+          contentTextStyle: const TextStyle(color: Colors.white),
+        ),
+      ),
       home: const MyHomePage(),
     );
   }
@@ -28,8 +47,8 @@ class _MyHomePageState extends State<MyHomePage> {
   static const platform = MethodChannel('permission_channel');
   List<Map<String, dynamic>> userApps = [];
   List<Map<String, dynamic>> systemApps = [];
+  List<Map<String, dynamic>> unknownSourceApps = [];
 
-  // List of dangerous permissions
   final List<String> dangerousPermissions = [
     "android.permission.READ_CALENDAR",
     "android.permission.WRITE_CALENDAR",
@@ -68,8 +87,7 @@ class _MyHomePageState extends State<MyHomePage> {
   Future<void> _getInstalledApps() async {
     try {
       final List<dynamic> result = await platform.invokeMethod('getInstalledApps');
-      List<Map<String, dynamic>> apps = List<Map<String, dynamic>>.from(
-          result.map((app) => Map<String, dynamic>.from(app)));
+      List<Map<String, dynamic>> apps = List<Map<String, dynamic>>.from(result.map((app) => Map<String, dynamic>.from(app)));
 
       List<Map<String, dynamic>> filteredUserApps = [];
       List<Map<String, dynamic>> filteredSystemApps = [];
@@ -79,17 +97,10 @@ class _MyHomePageState extends State<MyHomePage> {
         bool isSystemApp = app['isSystemApp'];
         List<dynamic> permissions = app['permissions'] ?? [];
 
-        // Check if the app has at least one dangerous permission
-        bool hasDangerousPermission = permissions.any(
-                (perm) => dangerousPermissions.contains(perm));
+        bool hasDangerousPermission = permissions.any((perm) => dangerousPermissions.contains(perm));
+        if (!hasDangerousPermission) continue;
 
-        if (!hasDangerousPermission) {
-          continue; // Skip apps without dangerous permissions
-        }
-
-        if (!isSystemApp &&
-            !packageName.startsWith('android.') &&
-            !packageName.startsWith('com.google.android.')) {
+        if (!isSystemApp && !packageName.startsWith('android.') && !packageName.startsWith('com.google.android.')) {
           filteredUserApps.add(app);
         } else {
           filteredSystemApps.add(app);
@@ -105,24 +116,86 @@ class _MyHomePageState extends State<MyHomePage> {
     }
   }
 
+  Future<void> _checkUnknownSources() async {
+    try {
+      final List<dynamic> result = await platform.invokeMethod('getInstalledApps');
+      List<Map<String, dynamic>> apps = List<Map<String, dynamic>>.from(result.map((app) => Map<String, dynamic>.from(app)));
+      List<Map<String, dynamic>> unknownApps = [];
+
+      for (var app in apps) {
+        String installer = app['installer'] ?? "";
+        bool isSystemApp = app['isSystemApp'] ?? false;
+
+        if (!isSystemApp && (installer.isEmpty || !installer.contains("com.android.vending"))) {
+          unknownApps.add(app);
+        }
+      }
+
+      setState(() {
+        unknownSourceApps = unknownApps;
+      });
+
+      _showUnknownSourcesDialog();
+    } on PlatformException catch (e) {
+      print("Error: '${e.message}'");
+    }
+  }
+
+  void _showUnknownSourcesDialog() {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text("Unknown Source Apps"),
+          content: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: unknownSourceApps.isNotEmpty
+                  ? unknownSourceApps.map((app) => Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4.0),
+                child: Text(
+                  "• ${app['appName']} (${app['packageName']})",
+                  style: const TextStyle(color: Colors.white),
+                ),
+              )).toList()
+                  : [const Text("No unknown source apps found.")],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text("Close", style: TextStyle(color: Colors.blueAccent)),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Dangerous Permission Apps')),
+      appBar: AppBar(
+        title: const Text('Dangerous Permission Apps'),
+        backgroundColor: Colors.blueAccent,
+      ),
       body: SingleChildScrollView(
+        padding: const EdgeInsets.all(8),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Padding(
-              padding: EdgeInsets.all(8.0),
-              child: Text('User Apps', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+            ElevatedButton.icon(
+              onPressed: _checkUnknownSources,
+              icon: const Icon(Icons.warning_amber),
+              label: const Text("Check Unknown Source Apps"),
             ),
+            const SizedBox(height: 16),
+            const Text('User Apps', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.white)),
+            const Divider(),
             ...userApps.map((app) => _buildAppTile(app)),
-
-            const Padding(
-              padding: EdgeInsets.all(8.0),
-              child: Text('System Apps', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-            ),
+            const SizedBox(height: 16),
+            const Text('System Apps', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.white)),
+            const Divider(),
             ...systemApps.map((app) => _buildAppTile(app)),
           ],
         ),
@@ -138,19 +211,26 @@ class _MyHomePageState extends State<MyHomePage> {
         .toList();
     int dangerousPermCount = dangerousPerms.length;
 
-    return ExpansionTile(
-      title: Text(app['packageName']),
-      subtitle: Text('${app['appName']} • $dangerousPermCount dangerous permissions'),
-      children: [
-        const Padding(
-          padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          child: Text(
-            'Dangerous Permissions:',
-            style: TextStyle(fontWeight: FontWeight.bold),
-          ),
+    return Card(
+      color: Colors.grey[850],
+      margin: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
+      child: ExpansionTile(
+        tilePadding: const EdgeInsets.symmetric(horizontal: 16),
+        title: Text(app['appName'], style: const TextStyle(color: Colors.white)),
+        subtitle: Text(
+          '${app['packageName']} • $dangerousPermCount dangerous permissions',
+          style: const TextStyle(color: Colors.white70),
         ),
-        ...dangerousPerms.map((perm) => ListTile(title: Text(perm))),
-      ],
+        childrenPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        children: [
+          const Text('Dangerous Permissions:', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+          const SizedBox(height: 4),
+          ...dangerousPerms.map((perm) => ListTile(
+            dense: true,
+            title: Text(perm, style: const TextStyle(color: Colors.white70)),
+          )),
+        ],
+      ),
     );
   }
 }

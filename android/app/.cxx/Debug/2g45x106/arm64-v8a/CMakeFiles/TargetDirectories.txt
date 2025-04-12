@@ -1,0 +1,2 @@
+C:/Users/Hector/sec3app/android/app/.cxx/Debug/2g45x106/arm64-v8a/CMakeFiles/edit_cache.dir
+C:/Users/Hector/sec3app/android/app/.cxx/Debug/2g45x106/arm64-v8a/CMakeFiles/rebuild_cache.dir
