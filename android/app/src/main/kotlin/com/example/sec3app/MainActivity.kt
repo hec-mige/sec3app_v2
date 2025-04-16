@@ -34,16 +34,23 @@ class MainActivity : FlutterActivity() {
                     permissions.addAll(packagePermissions)
                 }
             } catch (e: PackageManager.NameNotFoundException) {
-                // Handle exception
+
             }
 
             val isSystemApp = (packageInfo.flags and ApplicationInfo.FLAG_SYSTEM) != 0
+
+            val installer = try {
+                pm.getInstallSourceInfo(packageInfo.packageName).installingPackageName ?: ""
+            } catch (e: Exception) {
+                ""
+            }
 
             val appInfo = mapOf(
                 "packageName" to packageInfo.packageName,
                 "appName" to pm.getApplicationLabel(packageInfo).toString(),
                 "isSystemApp" to isSystemApp,
-                "permissions" to permissions
+                "permissions" to permissions,
+                "installer" to installer
             )
             appList.add(appInfo)
         }

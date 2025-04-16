@@ -78,6 +78,7 @@ class _MyHomePageState extends State<MyHomePage> {
     "android.permission.WRITE_EXTERNAL_STORAGE",
   ];
 
+
   @override
   void initState() {
     super.initState();
@@ -126,7 +127,7 @@ class _MyHomePageState extends State<MyHomePage> {
         String installer = app['installer'] ?? "";
         bool isSystemApp = app['isSystemApp'] ?? false;
 
-        if (!isSystemApp && (installer.isEmpty || !installer.contains("com.android.vending"))) {
+        if (!isSystemApp && (installer.isEmpty || !installer.contains('com.android.vending'))) {
           unknownApps.add(app);
         }
       }
